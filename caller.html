@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h2>Caller</h2>
+<video id="localVideo" autoplay playsinline></video>
+<video id="remoteVideo" autoplay playsinline></video>
+
+<script>
+const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNzcyMTA4NDE1fQ.LeO50gU_1N5UqEN_yuf2b8U-uQY6zSAVf5mqYk2OlYM";
+const targetUserId = 2;
+
+const ws = new WebSocket(`ws://127.0.0.1:8000/ws?token=${token}`);
+const pc = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+});
+
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+
+pc.ontrack = (event) => {
+    remoteVideo.srcObject = event.streams[0];
+};
+
+pc.onicecandidate = (event) => {
+    if (event.candidate) {
+        ws.send(JSON.stringify({
+            target: targetUserId,
+            type: "ice",
+            data: event.candidate
+        }));
+    }
+};
+
+ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "answer") {
+        await pc.setRemoteDescription(msg.data);
+    }
+
+    if (msg.type === "ice") {
+        await pc.addIceCandidate(msg.data);
+    }
+};
+
+ws.onopen = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = stream;
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    ws.send(JSON.stringify({
+        target: targetUserId,
+        type: "offer",
+        data: offer
+    }));
+};
+</script>
+</body>
+</html>

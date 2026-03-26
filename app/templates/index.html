@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>WebRTC Meeting</title>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:white;overflow:hidden;}
+
+/* ── Pre-join screen ─────────────────────────────────────────────────────────── */
+#prejoin{
+  position:fixed;inset:0;background:#202124;
+  display:flex;align-items:center;justify-content:center;
+  z-index:9999;
+}
+
+.prejoin-card{
+  background:#303134;border-radius:12px;
+  padding:32px;width:500px;max-width:90vw;
+  box-shadow:0 8px 24px rgba(0,0,0,0.5);
+}
+
+.prejoin-card h2{
+  margin:0 0 24px 0;text-align:center;
+  font-size:24px;font-weight:500;
+}
+
+.prejoin-preview{
+  position:relative;width:100%;aspect-ratio:16/9;
+  background:#1a1a1a;border-radius:10px;overflow:hidden;
+  margin-bottom:20px;
+}
+
+.prejoin-preview video{
+  width:100%;height:100%;object-fit:cover;
+}
+
+.prejoin-avatar{
+  position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;
+  font-size:72px;font-weight:600;color:#aaa;
+  background:#2a2b2f;
+}
+
+.prejoin-name{
+  position:absolute;bottom:12px;left:12px;
+  background:rgba(0,0,0,0.7);color:#fff;
+  padding:6px 12px;border-radius:6px;
+  font-size:14px;font-weight:500;
+}
+
+.prejoin-controls{
+  display:flex;gap:12px;justify-content:center;
+  margin-bottom:24px;
+}
+
+.prejoin-controls button{
+  background:#3c4043;border:none;color:white;
+  padding:12px 16px;border-radius:24px;
+  cursor:pointer;font-size:16px;
+  transition:background 0.2s;
+}
+
+.prejoin-controls button:hover{background:#5f6368;}
+.prejoin-controls button.off{background:#ea4335;}
+
+.prejoin-join{
+  width:100%;background:#1a73e8;border:none;
+  color:white;padding:14px;border-radius:8px;
+  font-size:16px;font-weight:500;cursor:pointer;
+  transition:background 0.2s;
+}
+
+.prejoin-join:hover{background:#1557b0;}
+
+/* ── Main meeting UI ─────────────────────────────────────────────────────────── */
+#meeting{display:none;}
+
+.topbar{height:60px;background:#303134;display:flex;align-items:center;padding:0 20px;gap:10px;border-bottom:1px solid #444;}
+.topbar input{background:#202124;border:1px solid #444;color:white;padding:6px;border-radius:6px;}
+.topbar button{background:#3c4043;border:none;color:white;padding:7px 14px;border-radius:6px;cursor:pointer;}
+
+.main{display:flex;height:calc(100vh - 60px);overflow:hidden;}
+
+#videos{
+  flex:1;display:grid;gap:8px;padding:12px;
+  overflow:hidden;background:#202124;
+  align-items:stretch;justify-items:stretch;
+}
+
+.tile{
+  position:relative;border-radius:10px;overflow:hidden;
+  background:#2a2b2f;box-shadow:0 2px 10px rgba(0,0,0,0.5);
+  min-height:0;
+}
+.tile.speaking{ outline:3px solid #00ff84; }
+
+.tile video{
+  width:100%;height:100%;object-fit:cover;
+  display:none;border-radius:10px;
+}
+
+.tile-avatar{
+  position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;
+  background:#353638;font-size:52px;font-weight:600;color:#aaa;
+}
+
+.tile-name{
+  position:absolute;bottom:8px;left:8px;
+  background:rgba(0,0,0,0.65);color:#fff;
+  font-size:13px;font-weight:500;padding:3px 10px;
+  border-radius:4px;pointer-events:none;
+  max-width:calc(100% - 16px);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+
+/* mute icon on tile */
+.tile-mute{
+  position:absolute;bottom:8px;right:8px;
+  background:rgba(220,50,50,0.85);
+  border-radius:50%;width:28px;height:28px;
+  display:none;align-items:center;justify-content:center;
+  font-size:14px;pointer-events:none;
+}
+
+/* reconnect overlay */
+#reconnectOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.75);
+  display:none;align-items:center;justify-content:center;
+  z-index:9998;flex-direction:column;gap:16px;
+}
+#reconnectOverlay .spinner{
+  width:48px;height:48px;border:4px solid #444;
+  border-top-color:#1a73e8;border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#reconnectOverlay p{color:#fff;font-size:16px;margin:0;}
+
+/* debug overlay */
+#dbgBox{
+  position:fixed;top:70px;right:4px;width:260px;max-height:300px;
+  overflow-y:auto;background:rgba(0,0,0,0.75);color:#0f0;
+  font-size:10px;padding:4px;border-radius:6px;z-index:999;
+  display:none;
+}
+
+.chatPanel{width:300px;background:#0b141a;display:flex;flex-direction:column;border-left:1px solid #222d34;}
+.chatPanel h3{padding:10px;margin:0;border-bottom:1px solid #222d34;background:#1f2c34;}
+#chatBox{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;}
+.bwrap{display:flex;flex-direction:column;max-width:80%;}
+.bwrap.me{align-self:flex-end;align-items:flex-end;}
+.bwrap.other{align-self:flex-start;align-items:flex-start;}
+.bname{font-size:11px;color:#00a884;margin-bottom:2px;padding:0 6px;}
+.bubble{padding:7px 12px;border-radius:10px;font-size:13px;line-height:1.45;word-break:break-word;}
+.bwrap.me .bubble{background:#005c4b;color:#e9edef;border-bottom-right-radius:2px;}
+.bwrap.other .bubble{background:#1f2c34;color:#e9edef;border-bottom-left-radius:2px;}
+.btime{font-size:10px;color:#8696a0;margin-top:2px;padding:0 6px;}
+.chatInput{display:flex;padding:8px;gap:6px;background:#1f2c34;}
+.chatInput input{flex:1;background:#2a3942;border:none;color:white;padding:8px 12px;border-radius:20px;outline:none;font-size:13px;}
+.chatInput input::placeholder{color:#8696a0;}
+.chatInput button{background:#00a884;border:none;color:white;padding:8px 14px;border-radius:20px;cursor:pointer;}
+
+/* ── Participant panel ───────────────────────────────────────────────────────── */
+#participantPanel{
+  width:260px;background:#202124;border-right:1px solid #3c4043;
+  display:none;flex-direction:column;
+  transition:width 0.2s;
+}
+#participantPanel.open{ display:flex; }
+.pPanel-header{
+  padding:14px 16px;font-size:15px;font-weight:500;
+  border-bottom:1px solid #3c4043;display:flex;
+  align-items:center;justify-content:space-between;
+}
+.pPanel-header span{ color:#e8eaed; }
+.pPanel-header button{
+  background:none;border:none;color:#9aa0a6;
+  font-size:18px;cursor:pointer;padding:0;line-height:1;
+}
+#participantList{ flex:1;overflow-y:auto;padding:8px 0; }
+.pItem{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 16px;transition:background 0.15s;
+}
+.pItem:hover{ background:#2d2e30; }
+.pAvatar{
+  width:36px;height:36px;border-radius:50%;
+  background:#5f6368;display:flex;align-items:center;
+  justify-content:center;font-size:15px;font-weight:600;
+  color:#fff;flex-shrink:0;
+}
+.pName{ flex:1;font-size:14px;color:#e8eaed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.pIcons{ display:flex;gap:4px;font-size:13px; }
+
+/* ── Pin / spotlight ─────────────────────────────────────────────────────────── */
+#videos.has-pin .tile:not(.pinned){
+  display:none;
+}
+#videos.has-pin .tile.pinned{
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+.tile-pin-btn{
+  position:absolute;top:8px;right:8px;
+  background:rgba(0,0,0,0.55);border:none;color:#fff;
+  border-radius:50%;width:28px;height:28px;
+  font-size:13px;cursor:pointer;
+  display:none;align-items:center;justify-content:center;
+  z-index:10;
+}
+.tile:hover .tile-pin-btn{ display:flex; }
+.tile.pinned .tile-pin-btn{ display:flex; background:#1a73e8; }
+
+.controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#303134;padding:10px 20px;border-radius:30px;display:flex;gap:10px;box-shadow:0 5px 20px rgba(0,0,0,0.6);}
+.controls button{background:#3c4043;border:none;color:white;padding:10px 14px;border-radius:20px;cursor:pointer;}
+.controls button:hover{background:#5f6368;}
+.leave{background:#d93025 !important;}
+</style>
+</head>
+<body>
+
+<div id="dbgBox"></div>
+
+<div id="reconnectOverlay">
+  <div class="spinner"></div>
+  <p id="reconnectMsg">Connection lost. Reconnecting...</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     PRE-JOIN SCREEN
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<div id="prejoin">
+  <div class="prejoin-card">
+    <h2>Ready to join?</h2>
+    
+    <div class="prejoin-preview">
+      <video id="prejoinVideo" autoplay muted playsinline></video>
+      <div id="prejoinAvatar" class="prejoin-avatar" style="display:none;">?</div>
+      <div id="prejoinName" class="prejoin-name">Loading...</div>
+    </div>
+
+    <div class="prejoin-controls">
+      <button id="prejoinMic" onclick="prejoinToggleMic()">🎤</button>
+      <button id="prejoinCam" onclick="prejoinToggleCam()">📷</button>
+    </div>
+
+    <button class="prejoin-join" onclick="joinFromPrejoin()">Join now</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     MAIN MEETING UI
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<div id="meeting">
+
+<div class="topbar">
+  <h3 style="margin-right:20px;">WebRTC Meeting</h3>
+  Room: <input id="room" value="room1">
+  Token: <input id="token">
+  <button onclick="joinRoom()">Join</button>
+  <button onclick="toggleDbg()" style="font-size:11px;padding:4px 8px;">Debug</button>
+</div>
+
+<div class="main">
+  <div id="participantPanel">
+    <div class="pPanel-header">
+      <span id="pPanelTitle">Participants (0)</span>
+      <button onclick="toggleParticipants()" title="Close">✕</button>
+    </div>
+    <div id="participantList"></div>
+  </div>
+  <div id="videos"></div>
+  <div class="chatPanel">
+    <h3>Chat</h3>
+    <div id="chatBox"></div>
+    <div class="chatInput">
+      <input id="chatInput" placeholder="Type a message" onkeydown="if(event.key==='Enter')sendMessage()">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="btnParticipants" onclick="toggleParticipants()" title="Participants">👥</button>
+  <button id="btnMute" onclick="toggleMute()">🎤</button>
+  <button id="btnCam"  onclick="toggleCamera()">📷</button>
+  <button id="btnNoise" onclick="toggleNoise()" title="Noise suppression">🔉</button>
+  <button onclick="shareScreen()">🖥</button>
+  <button onclick="startRecording()">⏺</button>
+  <button onclick="stopRecording()">⏹</button>
+  <button onclick="leaveRoom()" class="leave">Leave</button>
+</div>
+
+</div><!-- end #meeting -->
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// PRE-JOIN LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+let prejoinStream = null
+let prejoinAudioEnabled = true
+let prejoinVideoEnabled = true
+let noiseSuppressionOn = true   // on by default
+
+async function initPrejoin(){
+  try {
+    prejoinStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: {
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true
+      }
+    })
+    document.getElementById("prejoinVideo").srcObject = prejoinStream
+    
+    // Get username from token (decode JWT to show name)
+    const token = document.getElementById("token").value
+    if(token){
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        // For now just show "Ready" - we'll get real name after join
+        document.getElementById("prejoinName").textContent = "Ready to join"
+      } catch(e){
+        document.getElementById("prejoinName").textContent = "Ready to join"
+      }
+    } else {
+      document.getElementById("prejoinName").textContent = "Enter token to join"
+    }
+  } catch(e){
+    console.error("Camera/mic access denied:", e)
+    document.getElementById("prejoinAvatar").style.display = "flex"
+    document.getElementById("prejoinAvatar").textContent = "❌"
+    document.getElementById("prejoinName").textContent = "Camera/mic access denied"
+  }
+}
+
+function prejoinToggleMic(){
+  if(!prejoinStream) return
+  const track = prejoinStream.getAudioTracks()[0]
+  if(!track) return
+  track.enabled = !track.enabled
+  prejoinAudioEnabled = track.enabled
+  const btn = document.getElementById("prejoinMic")
+  btn.textContent = track.enabled ? "🎤" : "🔇"
+  btn.className = track.enabled ? "" : "off"
+}
+
+function prejoinToggleCam(){
+  if(!prejoinStream) return
+  const track = prejoinStream.getVideoTracks()[0]
+  if(!track) return
+  track.enabled = !track.enabled
+  prejoinVideoEnabled = track.enabled
+  const btn = document.getElementById("prejoinCam")
+  const vid = document.getElementById("prejoinVideo")
+  const av  = document.getElementById("prejoinAvatar")
+  btn.textContent = track.enabled ? "📷" : "📷🚫"
+  btn.className = track.enabled ? "" : "off"
+  vid.style.display = track.enabled ? "block" : "none"
+  av.style.display  = track.enabled ? "none" : "flex"
+  if(!track.enabled) av.textContent = "?"
+}
+
+function joinFromPrejoin(){
+  // Hide prejoin, show meeting
+  document.getElementById("prejoin").style.display = "none"
+  document.getElementById("meeting").style.display = "block"
+  
+  // Use the prejoin stream as localStream
+  localStream = prejoinStream
+  
+  // Join the room
+  joinRoom()
+}
+
+// Initialize prejoin on page load
+window.addEventListener("DOMContentLoaded", initPrejoin)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN MEETING LOGIC
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── state ──────────────────────────────────────────────────────────────────────
+let ws, localStream, recorder
+let peerConnections = {}   // string(userId) -> RTCPeerConnection
+let remoteStreams   = {}   // string(userId) -> MediaStream
+let recordedChunks  = []
+let myId   = null          // string
+let myName = ""
+let userNames = {}         // string(userId) -> displayName
+let userStates = {}        // string(userId) -> {audioMuted, videoOff}
+let pinnedId   = null      // currently pinned tile id, or null
+
+const ICE_FALLBACK = { iceServers:[{urls:"stun:stun.l.google.com:19302"}] }
+let ICE = ICE_FALLBACK  // replaced with TURN config after fetch
+
+// reconnect state
+let _reconnectTimer = null   // setTimeout handle
+let _reconnectAttempt = 0
+let _intentionalLeave = false
+let _hasJoinedOnce = false   // only reconnect after a successful first join
+let _lastRoom  = ""
+let _lastToken = ""
+
+// always work with string keys
+const K = v => String(v)
+
+// ── debug overlay ──────────────────────────────────────────────────────────────
+function dbg(msg){
+  console.log("[DBG]", msg)
+  const box = document.getElementById("dbgBox")
+  const line = document.createElement("div")
+  line.textContent = new Date().toLocaleTimeString("en",{hour12:false}) + " " + msg
+  box.appendChild(line)
+  box.scrollTop = box.scrollHeight
+}
+function toggleDbg(){
+  const b = document.getElementById("dbgBox")
+  b.style.display = b.style.display === "none" ? "block" : "none"
+}
+
+// ── join ───────────────────────────────────────────────────────────────────────
+async function joinRoom(){
+  const room  = document.getElementById("room").value
+  const token = document.getElementById("token").value
+
+  // localStream already set from prejoin
+  if(!localStream){
+    alert("Please allow camera/mic access first")
+    return
+  }
+
+  // Save for reconnect
+  _lastRoom  = room
+  _lastToken = token
+
+  // Fetch TURN/ICE config from server (credentials stay server-side)
+  try {
+    const res = await fetch("/protected/ice-config", {
+      headers: { "Authorization": "Bearer " + token }
+    })
+    if(res.ok) ICE = await res.json()
+    else ICE = ICE_FALLBACK
+  } catch(e) {
+    dbg("ICE config fetch failed, using STUN only")
+    ICE = ICE_FALLBACK
+  }
+  dbg("ICE config: " + JSON.stringify(ICE.iceServers.map(s=>s.urls)))
+
+  ws = new WebSocket(`ws://${window.location.host}/ws?token=${token}&room=${room}`)
+
+  ws.onopen  = () => {
+    dbg("WS open")
+    hideReconnectOverlay()
+    _reconnectAttempt = 0
+    clearTimeout(_reconnectTimer)
+    _reconnectTimer = null
+  }
+  ws.onerror = e  => dbg("WS error: " + e)
+  ws.onclose = e  => {
+    dbg("WS closed: " + e.code)
+    // Only auto-reconnect if user had successfully joined before
+    if(!_intentionalLeave && _hasJoinedOnce){
+      scheduleReconnect()
+    }
+  }
+
+  ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data)
+    dbg("← " + msg.type + (msg.from!=null?" from="+msg.from:"") + (msg.user_id!=null?" uid="+msg.user_id:""))
+
+    // ── I just joined: here are the people already in the room ──
+    if(msg.type === "existing_users"){
+      myId   = K(msg.my_id)
+      myName = msg.my_name
+      _hasJoinedOnce = true   // safe to auto-reconnect from now on
+
+      Object.entries(msg.user_names || {}).forEach(([k,v]) => userNames[K(k)] = v)
+
+      // show my own tile
+      showTile("local", myName, localStream, true)
+
+      // Update control buttons to match prejoin state
+      document.getElementById("btnMute").textContent = prejoinAudioEnabled ? "🎤" : "🔇"
+      document.getElementById("btnMute").style.background = prejoinAudioEnabled ? "" : "#ea4335"
+      document.getElementById("btnCam").textContent = prejoinVideoEnabled ? "📷" : "📷🚫"
+      document.getElementById("btnCam").style.background = prejoinVideoEnabled ? "" : "#ea4335"
+      
+      // Broadcast initial state
+      setTimeout(() => broadcastState(), 500)
+      refreshParticipants()
+
+      // show a tile for every existing user and wait — THEY will send me offers
+      msg.users.forEach(uid => {
+        const k = K(uid)
+        showTile(k, userNames[k] || "User "+k, null, false)
+        initPC(k, false)   // not initiator
+      })
+    }
+
+    // ── someone new joined after me: I send them an offer ──
+    if(msg.type === "new_user"){
+      const k    = K(msg.user_id)
+      const name = msg.username || "User "+k
+      userNames[k] = name
+      showTile(k, name, null, false)
+      initPC(k, true)      // I am initiator
+      refreshParticipants()
+    }
+
+    // ── WebRTC signaling ──
+    if(msg.type === "offer"){
+      const k = K(msg.from)
+      dbg("offer from " + k)
+      if(!peerConnections[k]){
+        showTile(k, userNames[k] || "User "+k, null, false)
+        initPC(k, false)
+      }
+      const pc = peerConnections[k]
+      await pc.setRemoteDescription(new RTCSessionDescription(msg.data))
+      const answer = await pc.createAnswer()
+      await pc.setLocalDescription(answer)
+      send({type:"answer", target:parseInt(k), data:answer})
+      dbg("answer sent to " + k)
+    }
+
+    if(msg.type === "answer"){
+      const k  = K(msg.from)
+      const pc = peerConnections[k]
+      if(pc){ await pc.setRemoteDescription(new RTCSessionDescription(msg.data)); dbg("answer applied from "+k) }
+      else   { dbg("ERROR: no PC for answer from "+k) }
+    }
+
+    if(msg.type === "ice_candidate"){
+      const k  = K(msg.from)
+      const pc = peerConnections[k]
+      if(pc) await pc.addIceCandidate(new RTCIceCandidate(msg.data))
+    }
+
+    if(msg.type === "user_left"){
+      removeTile(K(msg.user_id))
+      delete userNames[K(msg.user_id)]
+      refreshParticipants()
+    }
+
+    if(msg.type === "peer_reconnected"){
+      // A peer came back within the grace period — re-negotiate with them
+      const k = K(msg.user_id)
+      userNames[k] = msg.username || userNames[k] || "User "+k
+      dbg("peer_reconnected: " + k + ", re-initiating")
+      // Close stale PC if any, then create fresh one as initiator
+      if(peerConnections[k]){ peerConnections[k].close(); delete peerConnections[k] }
+      delete remoteStreams[k]
+      showTile(k, userNames[k], null, false)
+      initPC(k, true)
+    }
+
+    if(msg.type === "media_state"){
+      const k = K(msg.from)
+      userStates[k] = { audioMuted: msg.audio_muted, videoOff: msg.video_off }
+      updateTileState(k)
+      refreshParticipants()
+    }
+
+    if(msg.type === "chat"){
+      const name = msg.from_name || userNames[K(msg.from)] || "User "+msg.from
+      addChatMessage(name, msg.message, false)
+    }
+  }
+}
+
+function send(obj){ ws.send(JSON.stringify(obj)) }
+
+// ── peer connection ────────────────────────────────────────────────────────────
+function initPC(k, isInitiator){
+  if(peerConnections[k]){ dbg("PC already exists for "+k); return }
+  dbg("initPC " + k + " initiator=" + isInitiator)
+
+  const pc = new RTCPeerConnection(ICE)
+  peerConnections[k] = pc
+  remoteStreams[k]   = new MediaStream()
+
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream))
+
+  pc.ontrack = (e) => {
+    dbg("ontrack from " + k + " kind=" + e.track.kind)
+    remoteStreams[k].addTrack(e.track)
+    showTile(k, userNames[k] || "User "+k, remoteStreams[k], false)
+  }
+
+  pc.onicecandidate = (e) => {
+    if(e.candidate) send({type:"ice_candidate", target:parseInt(k), data:e.candidate})
+  }
+
+  pc.onconnectionstatechange = () => {
+    dbg("state " + k + " → " + pc.connectionState)
+  }
+
+  if(isInitiator){
+    pc.createOffer()
+      .then(offer => pc.setLocalDescription(offer).then(() => {
+        send({type:"offer", target:parseInt(k), data:offer})
+        dbg("offer sent to " + k)
+      }))
+  }
+}
+
+// ── tile management ────────────────────────────────────────────────────────────
+function showTile(id, name, stream, muted){
+  let tile = document.getElementById("tile_"+id)
+
+  if(!tile){
+    tile = document.createElement("div")
+    tile.id = "tile_"+id
+    tile.className = "tile"
+
+    const av = document.createElement("div")
+    av.className = "tile-avatar"
+    av.id = "av_"+id
+    av.textContent = (name||"?")[0].toUpperCase()
+    tile.appendChild(av)
+
+    const vid = document.createElement("video")
+    vid.id = "vid_"+id
+    vid.autoplay = true
+    vid.playsInline = true
+    vid.muted = !!muted
+    tile.appendChild(vid)
+
+    const lbl = document.createElement("div")
+    lbl.className = "tile-name"
+    lbl.textContent = name
+    tile.appendChild(lbl)
+
+    // pin button
+    const pinBtn = document.createElement("button")
+    pinBtn.className = "tile-pin-btn"
+    pinBtn.title = "Pin"
+    pinBtn.textContent = "📌"
+    pinBtn.onclick = (e) => { e.stopPropagation(); pinTile(id) }
+    tile.appendChild(pinBtn)
+
+    document.getElementById("videos").appendChild(tile)
+    updateLayout()
+    dbg("tile created: " + id + " (" + name + ")")
+  }
+
+  if(stream){
+    const vid = document.getElementById("vid_"+id)
+    const av  = document.getElementById("av_"+id)
+    vid.srcObject   = stream
+    vid.style.display = "block"
+    if(av) av.style.display = "none"
+    if(stream.getAudioTracks().length > 0) detectSpeaker(stream, tile)
+  }
+}
+
+function updateTileState(k){
+  const state = userStates[k]
+  if(!state) return
+  const tile = document.getElementById("tile_"+k)
+  if(!tile) return
+
+  // mute icon
+  let muteIcon = tile.querySelector(".tile-mute")
+  if(!muteIcon){
+    muteIcon = document.createElement("div")
+    muteIcon.className = "tile-mute"
+    tile.appendChild(muteIcon)
+  }
+  muteIcon.style.display = state.audioMuted ? "flex" : "none"
+  muteIcon.textContent = "🔇"
+
+  // camera off: show avatar, hide video
+  const vid = document.getElementById("vid_"+k)
+  const av  = document.getElementById("av_"+k)
+  if(state.videoOff){
+    if(vid) vid.style.display = "none"
+    if(av)  av.style.display  = "flex"
+  } else {
+    if(vid && vid.srcObject) vid.style.display = "block"
+    if(av)  av.style.display  = "none"
+  }
+}
+
+function removeTile(k){
+  if(pinnedId === k){
+    pinnedId = null
+    document.getElementById("videos").classList.remove("has-pin")
+  }
+  const tile = document.getElementById("tile_"+k)
+  if(tile){ tile.remove(); updateLayout() }
+  if(peerConnections[k]){ peerConnections[k].close(); delete peerConnections[k] }
+  delete remoteStreams[k]
+  dbg("tile removed: " + k)
+}
+
+// ── pin / spotlight ────────────────────────────────────────────────────────────
+function pinTile(id){
+  const grid = document.getElementById("videos")
+  if(pinnedId === id){
+    // unpin
+    const old = document.getElementById("tile_"+id)
+    if(old) old.classList.remove("pinned")
+    grid.classList.remove("has-pin")
+    pinnedId = null
+  } else {
+    // unpin previous
+    if(pinnedId){
+      const old = document.getElementById("tile_"+pinnedId)
+      if(old) old.classList.remove("pinned")
+    }
+    const tile = document.getElementById("tile_"+id)
+    if(tile) tile.classList.add("pinned")
+    grid.classList.add("has-pin")
+    pinnedId = id
+  }
+  updateLayout()
+}
+
+// ── layout ─────────────────────────────────────────────────────────────────────
+function updateLayout(){
+  const grid = document.getElementById("videos")
+  const n = grid.children.length
+  if(!n) return
+  const cols = n===1?1 : n<=2?2 : n<=4?2 : n<=6?3 : n<=9?3 : 4
+  const rows = Math.ceil(n/cols)
+  grid.style.gridTemplateColumns = `repeat(${cols},1fr)`
+  grid.style.gridTemplateRows    = `repeat(${rows},1fr)`
+  grid.style.height = "100%"
+}
+
+// ── reconnection ───────────────────────────────────────────────────────────────
+function showReconnectOverlay(attempt){
+  const overlay = document.getElementById("reconnectOverlay")
+  overlay.style.display = "flex"
+  document.getElementById("reconnectMsg").textContent =
+    attempt <= 1 ? "Connection lost. Reconnecting..." :
+    `Reconnecting... (attempt ${attempt})`
+}
+
+function hideReconnectOverlay(){
+  document.getElementById("reconnectOverlay").style.display = "none"
+}
+
+function scheduleReconnect(){
+  if(_reconnectTimer) return   // already scheduled
+  _reconnectAttempt++
+  // Exponential backoff: 1s, 2s, 4s, 8s, max 16s
+  const delay = Math.min(1000 * Math.pow(2, _reconnectAttempt - 1), 16000)
+  dbg(`Reconnect attempt ${_reconnectAttempt} in ${delay}ms`)
+  showReconnectOverlay(_reconnectAttempt)
+
+  // Tear down stale peer connections but keep tiles (show avatar)
+  Object.keys(peerConnections).forEach(k => {
+    peerConnections[k].close()
+    delete peerConnections[k]
+    delete remoteStreams[k]
+    const vid = document.getElementById("vid_"+k)
+    const av  = document.getElementById("av_"+k)
+    if(vid) vid.style.display = "none"
+    if(av)  av.style.display  = "flex"
+  })
+
+  _reconnectTimer = setTimeout(async () => {
+    _reconnectTimer = null
+    await joinRoom()
+  }, delay)
+}
+
+// ── controls ───────────────────────────────────────────────────────────────────
+function toggleMute(){
+  const track = localStream.getAudioTracks()[0]
+  if(!track) return
+  track.enabled = !track.enabled
+  const muted = !track.enabled
+  document.getElementById("btnMute").textContent = muted ? "🔇" : "🎤"
+  document.getElementById("btnMute").style.background = muted ? "#ea4335" : ""
+  broadcastState()
+  refreshParticipants()
+}
+
+function toggleCamera(){
+  const track = localStream.getVideoTracks()[0]
+  if(!track) return
+  track.enabled = !track.enabled
+  const off = !track.enabled
+  document.getElementById("btnCam").textContent = off ? "📷🚫" : "📷"
+  document.getElementById("btnCam").style.background = off ? "#ea4335" : ""
+  // show/hide own avatar
+  const myVid = document.getElementById("vid_local")
+  const myAv  = document.getElementById("av_local")
+  if(myVid) myVid.style.display = off ? "none" : "block"
+  if(myAv)  myAv.style.display  = off ? "flex"  : "none"
+  broadcastState()
+  refreshParticipants()
+}
+
+function broadcastState(){
+  if(!ws || ws.readyState !== WebSocket.OPEN) return
+  const audioMuted = !(localStream.getAudioTracks()[0]?.enabled ?? true)
+  const videoOff   = !(localStream.getVideoTracks()[0]?.enabled ?? true)
+  send({ type:"media_state", audio_muted: audioMuted, video_off: videoOff })
+}
+
+async function toggleNoise(){
+  noiseSuppressionOn = !noiseSuppressionOn
+  const btn = document.getElementById("btnNoise")
+  btn.style.background = noiseSuppressionOn ? "" : "#ea4335"
+  btn.title = noiseSuppressionOn ? "Noise suppression on" : "Noise suppression off"
+
+  // Re-acquire audio track with updated constraints
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        noiseSuppression: noiseSuppressionOn,
+        echoCancellation: noiseSuppressionOn,
+        autoGainControl:  noiseSuppressionOn
+      },
+      video: false
+    })
+    const newAudioTrack = newStream.getAudioTracks()[0]
+
+    // Replace track in all peer connections
+    for(const pc of Object.values(peerConnections)){
+      const sender = pc.getSenders().find(s => s.track?.kind === "audio")
+      if(sender) await sender.replaceTrack(newAudioTrack)
+    }
+
+    // Swap out the audio track in localStream
+    localStream.getAudioTracks().forEach(t => { t.stop(); localStream.removeTrack(t) })
+    localStream.addTrack(newAudioTrack)
+
+    // Preserve mute state
+    const muted = !document.getElementById("btnMute").textContent.includes("🎤")
+    newAudioTrack.enabled = !muted
+
+    dbg("Noise suppression: " + (noiseSuppressionOn ? "ON" : "OFF"))
+  } catch(e) {
+    dbg("toggleNoise failed: " + e)
+    noiseSuppressionOn = !noiseSuppressionOn  // revert
+    btn.style.background = noiseSuppressionOn ? "" : "#ea4335"
+  }
+}
+
+function leaveRoom(){
+  _intentionalLeave = true
+  clearTimeout(_reconnectTimer)
+  _reconnectTimer = null
+  hideReconnectOverlay()
+  if(ws) ws.close()
+  Object.values(peerConnections).forEach(pc=>pc.close())
+  peerConnections={}; remoteStreams={}; userNames={}; userStates={}
+  myId=null; myName=""; pinnedId=null
+  document.getElementById("videos").classList.remove("has-pin")
+  _reconnectAttempt=0; _hasJoinedOnce=false
+  document.getElementById("videos").innerHTML=""
+  // go back to pre-join
+  document.getElementById("meeting").style.display = "none"
+  document.getElementById("prejoin").style.display  = "flex"
+  prejoinStream = null
+  localStream   = null
+  _intentionalLeave = false
+  initPrejoin()
+}
+
+async function shareScreen(){
+  try{
+    const s = await navigator.mediaDevices.getDisplayMedia({video:true})
+    const t = s.getVideoTracks()[0]
+    Object.values(peerConnections).forEach(pc=>{
+      const sender=pc.getSenders().find(s=>s.track?.kind==="video")
+      if(sender) sender.replaceTrack(t)
+    })
+    showTile("local", myName, s, true)
+    t.onended = ()=>switchToCamera()
+  }catch(e){ console.error(e) }
+}
+
+async function switchToCamera(){
+  const s = await navigator.mediaDevices.getUserMedia({video:true,audio:true})
+  Object.values(peerConnections).forEach(pc=>{
+    const sender=pc.getSenders().find(s=>s.track?.kind==="video")
+    if(sender) sender.replaceTrack(s.getVideoTracks()[0])
+  })
+  showTile("local", myName, s, true)
+  localStream=s
+}
+
+function detectSpeaker(stream, tile){
+  const ctx=new AudioContext(), an=ctx.createAnalyser()
+  ctx.createMediaStreamSource(stream).connect(an)
+  an.fftSize=512
+  const d=new Uint8Array(an.frequencyBinCount)
+  ;(function loop(){
+    an.getByteFrequencyData(d)
+    tile.classList.toggle("speaking", d.reduce((a,b)=>a+b)/d.length>25)
+    requestAnimationFrame(loop)
+  })()
+}
+
+// ── participant panel ──────────────────────────────────────────────────────────
+function toggleParticipants(){
+  const panel = document.getElementById("participantPanel")
+  const btn   = document.getElementById("btnParticipants")
+  panel.classList.toggle("open")
+  btn.style.background = panel.classList.contains("open") ? "#1a73e8" : ""
+  if(panel.classList.contains("open")) renderParticipants()
+}
+
+function renderParticipants(){
+  const list = document.getElementById("participantList")
+  list.innerHTML = ""
+
+  // Build full participant map: me + all peers
+  const all = []
+
+  // Me
+  const myAudioMuted = !(localStream?.getAudioTracks()[0]?.enabled ?? true)
+  const myVideoOff   = !(localStream?.getVideoTracks()[0]?.enabled ?? true)
+  all.push({ id:"local", name: myName || "You", audioMuted: myAudioMuted, videoOff: myVideoOff, isMe: true })
+
+  // Peers (anyone with a tile)
+  Object.entries(userNames).forEach(([k, name]) => {
+    const state = userStates[k] || {}
+    all.push({ id:k, name, audioMuted: !!state.audioMuted, videoOff: !!state.videoOff, isMe: false })
+  })
+
+  document.getElementById("pPanelTitle").textContent = `Participants (${all.length})`
+
+  all.forEach(p => {
+    const item = document.createElement("div")
+    item.className = "pItem"
+
+    const av = document.createElement("div")
+    av.className = "pAvatar"
+    av.textContent = (p.name||"?")[0].toUpperCase()
+
+    const nm = document.createElement("div")
+    nm.className = "pName"
+    nm.textContent = p.name + (p.isMe ? " (You)" : "")
+
+    const icons = document.createElement("div")
+    icons.className = "pIcons"
+    icons.innerHTML =
+      (p.audioMuted ? `<span title="Muted">🔇</span>` : `<span title="Mic on">🎤</span>`) +
+      (p.videoOff   ? `<span title="Camera off">📷🚫</span>` : `<span title="Camera on">📷</span>`)
+
+    item.appendChild(av)
+    item.appendChild(nm)
+    item.appendChild(icons)
+    list.appendChild(item)
+  })
+}
+
+// Re-render panel whenever state changes (called from updateTileState, removeTile, new_user, user_left)
+function refreshParticipants(){
+  const panel = document.getElementById("participantPanel")
+  if(panel.classList.contains("open")) renderParticipants()
+}
+
+// ── chat ───────────────────────────────────────────────────────────────────────
+function sendMessage(){
+  const inp=document.getElementById("chatInput")
+  const txt=inp.value.trim()
+  if(!txt||!ws) return
+  send({type:"chat",message:txt})
+  addChatMessage(myName,txt,true)
+  inp.value=""
+}
+
+function addChatMessage(name,message,isMine){
+  const box=document.getElementById("chatBox")
+  const now=new Date()
+  const t=now.getHours().toString().padStart(2,"0")+":"+now.getMinutes().toString().padStart(2,"0")
+  const wrap=document.createElement("div")
+  wrap.className="bwrap "+(isMine?"me":"other")
+  if(!isMine){const n=document.createElement("div");n.className="bname";n.textContent=name;wrap.appendChild(n)}
+  const b=document.createElement("div");b.className="bubble";b.textContent=message;wrap.appendChild(b)
+  const ts=document.createElement("div");ts.className="btime";ts.textContent=t;wrap.appendChild(ts)
+  box.appendChild(wrap);box.scrollTop=box.scrollHeight
+}
+
+// ── recording ──────────────────────────────────────────────────────────────────
+function startRecording(){
+  const c=new MediaStream()
+  localStream.getTracks().forEach(t=>c.addTrack(t))
+  Object.values(remoteStreams).forEach(s=>s.getTracks().forEach(t=>c.addTrack(t)))
+  recorder=new MediaRecorder(c)
+  recorder.ondataavailable=e=>{if(e.data.size>0)recordedChunks.push(e.data)}
+  recorder.start()
+}
+function stopRecording(){
+  recorder.stop()
+  recorder.onstop=()=>{
+    const a=document.createElement("a")
+    a.href=URL.createObjectURL(new Blob(recordedChunks,{type:"video/webm"}))
+    a.download="recording.webm";a.click();recordedChunks=[]
+  }
+}
+</script>
+</body>
+</html>
