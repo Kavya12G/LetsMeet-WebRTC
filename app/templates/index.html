@@ -448,7 +448,8 @@ async function joinRoom(){
   }
   dbg("ICE config: " + JSON.stringify(ICE.iceServers.map(s=>s.urls)))
 
-  ws = new WebSocket(`ws://${window.location.host}/ws?token=${token}&room=${room}`)
+  const wsProtocol = location.protocol === "https:" ? "wss" : "ws"
+  ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws?token=${token}&room=${room}`)
 
   ws.onopen  = () => {
     dbg("WS open")
