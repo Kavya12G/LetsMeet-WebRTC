@@ -122,6 +122,38 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
   font-size:14px;pointer-events:none;
 }
 
+/* ── Waiting room overlay ────────────────────────────────────────────────────── */
+#waitingOverlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.85);
+  display:none;align-items:center;justify-content:center;
+  z-index:9997;flex-direction:column;gap:16px;
+}
+#waitingOverlay .spinner{
+  width:48px;height:48px;border:4px solid #444;
+  border-top-color:#1a73e8;border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+#waitingOverlay p{color:#fff;font-size:18px;margin:0;}
+#waitingOverlay button{
+  background:#ea4335;border:none;color:#fff;
+  padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;
+}
+
+/* ── Admit popup ─────────────────────────────────────────────────────────────── */
+#admitQueue{
+  position:fixed;top:80px;right:16px;
+  display:flex;flex-direction:column;gap:8px;z-index:9997;
+}
+.admitCard{
+  background:#303134;border-radius:10px;padding:14px 16px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:240px;
+}
+.admitCard p{margin:0 0 10px 0;font-size:14px;color:#e8eaed;}
+.admitCard .admitBtns{display:flex;gap:8px;}
+.admitCard button{flex:1;border:none;padding:8px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;}
+.admitCard .btnAdmit{background:#1a73e8;color:#fff;}
+.admitCard .btnDeny{background:#3c4043;color:#fff;}
+
 /* reconnect overlay */
 #reconnectOverlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.75);
@@ -225,6 +257,14 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
   <div class="spinner"></div>
   <p id="reconnectMsg">Connection lost. Reconnecting...</p>
 </div>
+
+<div id="waitingOverlay">
+  <div class="spinner"></div>
+  <p>Waiting to be admitted...</p>
+  <button onclick="cancelWait()">Cancel</button>
+</div>
+
+<div id="admitQueue"></div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════════
      PRE-JOIN SCREEN
@@ -397,6 +437,7 @@ let myName = ""
 let userNames = {}         // string(userId) -> displayName
 let userStates = {}        // string(userId) -> {audioMuted, videoOff}
 let pinnedId   = null      // currently pinned tile id, or null
+let isHost     = false     // true if this user is the room host
 
 const ICE_FALLBACK = { iceServers:[{urls:"stun:stun.l.google.com:19302"}] }
 let ICE = ICE_FALLBACK  // replaced with TURN config after fetch
@@ -498,7 +539,9 @@ async function joinRoom(){
     if(msg.type === "existing_users"){
       myId   = K(msg.my_id)
       myName = msg.my_name
-      _hasJoinedOnce = true   // safe to auto-reconnect from now on
+      isHost = !!msg.is_host
+      _hasJoinedOnce = true
+      document.getElementById("waitingOverlay").style.display = "none"   // safe to auto-reconnect from now on
 
       Object.entries(msg.user_names || {}).forEach(([k,v]) => userNames[K(k)] = v)
 
@@ -907,8 +950,10 @@ function leaveRoom(){
   if(ws) ws.close()
   Object.values(peerConnections).forEach(pc=>pc.close())
   peerConnections={}; remoteStreams={}; userNames={}; userStates={}
-  myId=null; myName=""; pinnedId=null
+  myId=null; myName=""; pinnedId=null; isHost=false
   document.getElementById("videos").classList.remove("has-pin")
+  document.getElementById("admitQueue").innerHTML=""
+  document.getElementById("waitingOverlay").style.display="none"
   _reconnectAttempt=0; _hasJoinedOnce=false
   document.getElementById("videos").innerHTML=""
   // go back to pre-join
@@ -955,7 +1000,36 @@ function detectSpeaker(stream, tile){
   })()
 }
 
-// ── participant panel ──────────────────────────────────────────────────────────
+// ── waiting room ──────────────────────────────────────────────────────────────
+function showAdmitCard(uid, name){
+  const queue = document.getElementById("admitQueue")
+  const card = document.createElement("div")
+  card.className = "admitCard"
+  card.id = "admitCard_"+uid
+  card.innerHTML = `
+    <p>🙋 <strong>${name}</strong> wants to join</p>
+    <div class="admitBtns">
+      <button class="btnAdmit" onclick="admitUser('${uid}')">Admit</button>
+      <button class="btnDeny"  onclick="denyUser('${uid}')">Deny</button>
+    </div>`
+  queue.appendChild(card)
+}
+
+function admitUser(uid){
+  send({type:"admit_user", user_id: parseInt(uid)})
+  document.getElementById("admitCard_"+uid)?.remove()
+}
+
+function denyUser(uid){
+  send({type:"deny_user", user_id: parseInt(uid)})
+  document.getElementById("admitCard_"+uid)?.remove()
+}
+
+function cancelWait(){
+  send({type:"cancel_wait"})
+  document.getElementById("waitingOverlay").style.display = "none"
+  leaveRoom()
+}
 function toggleParticipants(){
   const panel = document.getElementById("participantPanel")
   const btn   = document.getElementById("btnParticipants")
@@ -1014,6 +1088,26 @@ function refreshParticipants(){
   const panel = document.getElementById("participantPanel")
   if(panel.classList.contains("open")) renderParticipants()
 }
+
+    if(msg.type === "waiting_admission"){
+      document.getElementById("waitingOverlay").style.display = "flex"
+      dbg("Waiting for host to admit")
+    }
+
+    if(msg.type === "admission_denied"){
+      document.getElementById("waitingOverlay").style.display = "none"
+      alert("Your request to join was denied.")
+      leaveRoom()
+    }
+
+    if(msg.type === "you_are_host"){
+      isHost = true
+      dbg("You are now the host")
+    }
+
+    if(msg.type === "admission_request"){
+      showAdmitCard(K(msg.user_id), msg.username)
+    }
 
 // ── chat ───────────────────────────────────────────────────────────────────────
 function sendMessage(){
