@@ -402,6 +402,8 @@ let _intentionalLeave = false
 let _hasJoinedOnce = false   // only reconnect after a successful first join
 let _lastRoom  = ""
 let _lastToken = ""
+let _refreshToken = ""
+let _tokenRefreshTimer = null
 
 // always work with string keys
 const K = v => String(v)
@@ -434,6 +436,8 @@ async function joinRoom(){
   // Save for reconnect
   _lastRoom  = room
   _lastToken = token
+  if(!_refreshToken) _refreshToken = token  // fallback, overwritten after login
+  scheduleTokenRefresh(token)
 
   // Fetch TURN/ICE config from server (credentials stay server-side)
   try {
@@ -572,6 +576,35 @@ async function joinRoom(){
 }
 
 function send(obj){ ws.send(JSON.stringify(obj)) }
+
+// ── token refresh ──────────────────────────────────────────────────────────────
+function scheduleTokenRefresh(token){
+  clearTimeout(_tokenRefreshTimer)
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const expiresIn = (payload.exp * 1000) - Date.now() - 120000  // refresh 2min before expiry
+    if(expiresIn <= 0) return
+    _tokenRefreshTimer = setTimeout(async () => {
+      try {
+        const res = await fetch("/auth/refresh", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({refresh_token: _refreshToken})
+        })
+        if(res.ok){
+          const data = await res.json()
+          _lastToken = data.access_token
+          _refreshToken = data.refresh_token
+          document.getElementById("token").value = _lastToken
+          dbg("Token refreshed silently")
+          scheduleTokenRefresh(_lastToken)
+        } else {
+          dbg("Token refresh failed — user may need to re-login")
+        }
+      } catch(e){ dbg("Token refresh error: " + e) }
+    }, expiresIn)
+  } catch(e){ dbg("Could not schedule token refresh") }
+}
 
 // ── peer connection ────────────────────────────────────────────────────────────
 function initPC(k, isInitiator){
@@ -848,7 +881,9 @@ async function toggleNoise(){
 function leaveRoom(){
   _intentionalLeave = true
   clearTimeout(_reconnectTimer)
+  clearTimeout(_tokenRefreshTimer)
   _reconnectTimer = null
+  _tokenRefreshTimer = null
   hideReconnectOverlay()
   if(ws) ws.close()
   Object.values(peerConnections).forEach(pc=>pc.close())
