@@ -438,6 +438,7 @@ let userNames = {}         // string(userId) -> displayName
 let userStates = {}        // string(userId) -> {audioMuted, videoOff}
 let pinnedId   = null      // currently pinned tile id, or null
 let isHost     = false     // true if this user is the room host
+let isWaiting  = false     // true while in waiting room
 
 const ICE_FALLBACK = { iceServers:[{urls:"stun:stun.l.google.com:19302"}] }
 let ICE = ICE_FALLBACK  // replaced with TURN config after fetch
@@ -525,8 +526,7 @@ async function joinRoom(){
   ws.onerror = e  => dbg("WS error: " + e)
   ws.onclose = e  => {
     dbg("WS closed: " + e.code)
-    // Only auto-reconnect if user had successfully joined before
-    if(!_intentionalLeave && _hasJoinedOnce){
+    if(!_intentionalLeave && _hasJoinedOnce && !isWaiting){
       scheduleReconnect()
     }
   }
@@ -540,6 +540,7 @@ async function joinRoom(){
       myId   = K(msg.my_id)
       myName = msg.my_name
       isHost = !!msg.is_host
+      isWaiting = false
       _hasJoinedOnce = true
       document.getElementById("waitingOverlay").style.display = "none"   // safe to auto-reconnect from now on
 
@@ -636,11 +637,13 @@ async function joinRoom(){
     }
 
     if(msg.type === "waiting_admission"){
+      isWaiting = true
       document.getElementById("waitingOverlay").style.display = "flex"
       dbg("Waiting for host to admit")
     }
 
     if(msg.type === "admission_denied"){
+      isWaiting = false
       document.getElementById("waitingOverlay").style.display = "none"
       alert("Your request to join was denied.")
       leaveRoom()
@@ -970,7 +973,7 @@ function leaveRoom(){
   if(ws) ws.close()
   Object.values(peerConnections).forEach(pc=>pc.close())
   peerConnections={}; remoteStreams={}; userNames={}; userStates={}
-  myId=null; myName=""; pinnedId=null; isHost=false
+  myId=null; myName=""; pinnedId=null; isHost=false; isWaiting=false
   document.getElementById("videos").classList.remove("has-pin")
   document.getElementById("admitQueue").innerHTML=""
   document.getElementById("waitingOverlay").style.display="none"
