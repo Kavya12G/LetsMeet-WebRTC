@@ -634,6 +634,26 @@ async function joinRoom(){
       const name = msg.from_name || userNames[K(msg.from)] || "User "+msg.from
       addChatMessage(name, msg.message, false)
     }
+
+    if(msg.type === "waiting_admission"){
+      document.getElementById("waitingOverlay").style.display = "flex"
+      dbg("Waiting for host to admit")
+    }
+
+    if(msg.type === "admission_denied"){
+      document.getElementById("waitingOverlay").style.display = "none"
+      alert("Your request to join was denied.")
+      leaveRoom()
+    }
+
+    if(msg.type === "you_are_host"){
+      isHost = true
+      dbg("You are now the host")
+    }
+
+    if(msg.type === "admission_request"){
+      showAdmitCard(K(msg.user_id), msg.username)
+    }
   }
 }
 
@@ -1088,26 +1108,6 @@ function refreshParticipants(){
   const panel = document.getElementById("participantPanel")
   if(panel.classList.contains("open")) renderParticipants()
 }
-
-    if(msg.type === "waiting_admission"){
-      document.getElementById("waitingOverlay").style.display = "flex"
-      dbg("Waiting for host to admit")
-    }
-
-    if(msg.type === "admission_denied"){
-      document.getElementById("waitingOverlay").style.display = "none"
-      alert("Your request to join was denied.")
-      leaveRoom()
-    }
-
-    if(msg.type === "you_are_host"){
-      isHost = true
-      dbg("You are now the host")
-    }
-
-    if(msg.type === "admission_request"){
-      showAdmitCard(K(msg.user_id), msg.username)
-    }
 
 // ── chat ───────────────────────────────────────────────────────────────────────
 function sendMessage(){
