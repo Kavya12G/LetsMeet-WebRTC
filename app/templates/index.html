@@ -258,6 +258,7 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
   Room: <input id="room" value="room1">
   Token: <input id="token">
   <button onclick="joinRoom()">Join</button>
+  <button onclick="copyInviteLink()" title="Copy invite link">🔗 Invite</button>
   <button onclick="toggleDbg()" style="font-size:11px;padding:4px 8px;">Debug</button>
 </div>
 
@@ -375,7 +376,12 @@ function joinFromPrejoin(){
 }
 
 // Initialize prejoin on page load
-window.addEventListener("DOMContentLoaded", initPrejoin)
+window.addEventListener("DOMContentLoaded", () => {
+  // Auto-fill room from URL param e.g. ?room=room1
+  const params = new URLSearchParams(window.location.search)
+  if(params.get("room")) document.getElementById("room").value = params.get("room")
+  initPrejoin()
+})
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN MEETING LOGIC
@@ -420,6 +426,19 @@ function dbg(msg){
 function toggleDbg(){
   const b = document.getElementById("dbgBox")
   b.style.display = b.style.display === "none" ? "block" : "none"
+}
+
+function copyInviteLink(){
+  const room = document.getElementById("room").value || _lastRoom
+  const url  = `${location.origin}/?room=${encodeURIComponent(room)}`
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector('.topbar button[onclick="copyInviteLink()"]')
+    const orig = btn.textContent
+    btn.textContent = "✅ Copied!"
+    setTimeout(() => btn.textContent = orig, 2000)
+  }).catch(() => {
+    prompt("Copy this invite link:", url)
+  })
 }
 
 // ── join ───────────────────────────────────────────────────────────────────────
