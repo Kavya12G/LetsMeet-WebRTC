@@ -122,32 +122,42 @@ async def websocket_endpoint(websocket: WebSocket):
             waiting[room_id] = {}
         waiting[room_id][user_id] = entry
 
-        # Wait for host decision, keep connection alive
-        try:
-            deadline = asyncio.get_event_loop().time() + ADMIT_TIMEOUT
+        # Wait for host decision — keep socket alive, listen for cancel
+        socket_closed = False
+        async def _keep_alive():
+            nonlocal socket_closed
             while not entry["event"].is_set():
-                remaining_time = deadline - asyncio.get_event_loop().time()
-                if remaining_time <= 0:
-                    break
                 try:
-                    raw = await asyncio.wait_for(websocket.receive_text(), timeout=min(1.0, remaining_time))
+                    raw = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
                     msg = json.loads(raw)
                     if msg.get("type") == "cancel_wait":
+                        entry["event"].set()
                         break
                 except asyncio.TimeoutError:
                     continue
                 except Exception:
+                    socket_closed = True
+                    entry["event"].set()
                     break
-        except Exception:
-            pass
+
+        try:
+            await asyncio.wait_for(_keep_alive(), timeout=float(ADMIT_TIMEOUT))
+        except asyncio.TimeoutError:
+            entry["event"].set()
 
         waiting.get(room_id, {}).pop(user_id, None)
 
-        if not entry["admitted"]:
-            await manager.send_to_user(user_id, {"type": "admission_denied"})
+        if socket_closed:
             manager.disconnect(user_id)
             return
 
+        if not entry["admitted"]:
+            try:
+                await manager.send_to_user(user_id, {"type": "admission_denied"})
+            except Exception:
+                pass
+            manager.disconnect(user_id)
+            return
         # Admitted — full join
         existing = [{"user_id": uid, "username": user_names.get(uid, str(uid))} for uid in rooms[room_id]]
         await manager.send_to_user(user_id, {
