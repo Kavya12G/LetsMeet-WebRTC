@@ -6,11 +6,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080
+    ALLOWED_ORIGINS: str = "*"
     TURN_URL: str = "turn:openrelay.metered.ca:80"
     TURN_USERNAME: str = "openrelayproject"
     TURN_CREDENTIAL: str = "openrelayproject"
+
+    def get_allowed_origins(self) -> List[str]:
+        if self.ALLOWED_ORIGINS == "*":
+            return ["*"]
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
 
     class Config:
         env_file = ".env"

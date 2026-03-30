@@ -7,7 +7,7 @@ from app.services.auth_service import create_user, authenticate_user
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.db.session import get_db
 from app.models.user import User
-from app.main import limiter
+from app.core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
