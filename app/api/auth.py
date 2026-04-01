@@ -8,6 +8,7 @@ from app.core.security import create_access_token, create_refresh_token, decode_
 from app.db.session import get_db
 from app.models.user import User
 from app.core.limiter import limiter
+from app.core.logging import logger
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -19,7 +20,9 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
-    return create_user(db, user_data.username, user_data.email, user_data.password)
+    user = create_user(db, user_data.username, user_data.email, user_data.password)
+    logger.info(f"User registered: {user.username} (id={user.id})")
+    return user
 
 
 @router.post("/login", response_model=Token)
