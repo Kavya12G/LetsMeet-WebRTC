@@ -1,5 +1,5 @@
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,12 +12,16 @@ from app.api import auth, protected, ws
 from app.websocket.signaling import router as signaling_router
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.logging import setup_logging, logger
+
+setup_logging()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    logger.info("Starting LetsMeet-WebRTC server")
     yield
+    logger.info("Server shutting down")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -37,6 +41,12 @@ app.include_router(auth.router)
 app.include_router(protected.router)
 app.include_router(ws.router)
 app.include_router(signaling_router)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled error on {request.method} {request.url}: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/")
