@@ -2,6 +2,7 @@
 <html>
 <head>
 <title>WebRTC Meeting</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
 body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:white;overflow:hidden;}
 
@@ -247,6 +248,61 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
 .controls button{background:#3c4043;border:none;color:white;padding:10px 14px;border-radius:20px;cursor:pointer;}
 .controls button:hover{background:#5f6368;}
 .leave{background:#d93025 !important;}
+
+/* ── Mobile responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Topbar: hide room/token inputs, show only title + join btn */
+  .topbar{padding:0 12px;gap:6px;height:52px;}
+  .topbar h3{font-size:14px;margin-right:8px !important;}
+  .topbar input{width:80px;font-size:12px;padding:4px 6px;}
+  .topbar button{padding:5px 10px;font-size:12px;}
+
+  /* Main layout: stack vertically */
+  .main{flex-direction:column;}
+
+  /* Participant panel: full width drawer from top */
+  #participantPanel{
+    width:100% !important;border-right:none;
+    border-bottom:1px solid #3c4043;max-height:40vh;
+  }
+
+  /* Videos: fill available space above controls */
+  #videos{padding:6px;gap:6px;height:calc(100vh - 52px - 70px);}
+
+  /* Chat panel: hidden by default on mobile, slides up as overlay */
+  .chatPanel{
+    position:fixed;bottom:0;left:0;right:0;
+    width:100% !important;height:60vh;
+    border-left:none;border-top:1px solid #222d34;
+    border-radius:16px 16px 0 0;
+    transform:translateY(100%);
+    transition:transform 0.3s ease;
+    z-index:500;
+  }
+  .chatPanel.open{ transform:translateY(0); }
+
+  /* Controls: smaller, full width centered */
+  .controls{
+    bottom:0;left:0;right:0;transform:none;
+    border-radius:0;padding:8px 12px;
+    justify-content:center;gap:6px;
+    width:100%;box-sizing:border-box;
+  }
+  .controls button{padding:10px 10px;font-size:16px;}
+
+  /* Tile avatar smaller on mobile */
+  .tile-avatar{font-size:32px;}
+  .tile-name{font-size:11px;}
+
+  /* Admit queue: full width on mobile */
+  #admitQueue{left:8px;right:8px;top:60px;}
+  .admitCard{min-width:unset;}
+
+  /* Pre-join card: full screen on mobile */
+  .prejoin-card{padding:20px;border-radius:0;width:100%;max-width:100%;min-height:100vh;
+    display:flex;flex-direction:column;justify-content:center;}
+  .prejoin-avatar{font-size:48px;}
+}
 </style>
 </head>
 <body>
@@ -326,6 +382,7 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
   <button id="btnMute" onclick="toggleMute()">🎤</button>
   <button id="btnCam"  onclick="toggleCamera()">📷</button>
   <button id="btnNoise" onclick="toggleNoise()" title="Noise suppression">🔉</button>
+  <button id="btnChat" onclick="toggleChat()" title="Chat">💬</button>
   <button onclick="shareScreen()">🖥</button>
   <button onclick="startRecording()">⏺</button>
   <button onclick="stopRecording()">⏹</button>
@@ -1059,6 +1116,13 @@ function toggleParticipants(){
   panel.classList.toggle("open")
   btn.style.background = panel.classList.contains("open") ? "#1a73e8" : ""
   if(panel.classList.contains("open")) renderParticipants()
+}
+
+function toggleChat(){
+  const panel = document.querySelector(".chatPanel")
+  const btn   = document.getElementById("btnChat")
+  panel.classList.toggle("open")
+  btn.style.background = panel.classList.contains("open") ? "#1a73e8" : ""
 }
 
 function renderParticipants(){
