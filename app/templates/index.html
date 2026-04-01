@@ -249,6 +249,14 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
 .controls button:hover{background:#5f6368;}
 .leave{background:#d93025 !important;}
 
+/* ── Connection quality ──────────────────────────────────────────────────────── */
+.tile-quality{
+  position:absolute;top:8px;right:8px;
+  font-size:13px;z-index:10;pointer-events:none;
+  background:rgba(0,0,0,0.45);border-radius:4px;
+  padding:2px 5px;line-height:1;
+}
+
 /* ── Raise hand & reactions ──────────────────────────────────────────────────── */
 .tile-hand{
   position:absolute;top:8px;left:8px;
@@ -661,6 +669,7 @@ async function joinRoom(){
       // Broadcast initial state
       setTimeout(() => broadcastState(), 500)
       refreshParticipants()
+      startQualityMonitor()
 
       // show a tile for every existing user and wait — THEY will send me offers
       msg.users.forEach(uid => {
@@ -871,6 +880,15 @@ function showTile(id, name, stream, muted){
     pinBtn.onclick = (e) => { e.stopPropagation(); pinTile(id) }
     tile.appendChild(pinBtn)
 
+    // quality indicator (only for remote peers, not local)
+    if(id !== "local"){
+      const qual = document.createElement("div")
+      qual.className = "tile-quality"
+      qual.id = "qual_"+id
+      qual.textContent = "📶"
+      tile.appendChild(qual)
+    }
+
     document.getElementById("videos").appendChild(tile)
     updateLayout()
     dbg("tile created: " + id + " (" + name + ")")
@@ -1078,6 +1096,7 @@ function leaveRoom(){
   _intentionalLeave = true
   clearTimeout(_reconnectTimer)
   clearTimeout(_tokenRefreshTimer)
+  stopQualityMonitor()
   _reconnectTimer = null
   _tokenRefreshTimer = null
   hideReconnectOverlay()
@@ -1230,6 +1249,55 @@ function showReactionFloat(id, emoji){
   el.textContent = emoji
   tile.appendChild(el)
   setTimeout(() => el.remove(), 2000)
+}
+
+// ── connection quality ─────────────────────────────────────────────────────────
+let _qualityTimer = null
+
+function startQualityMonitor(){
+  if(_qualityTimer) return
+  _qualityTimer = setInterval(updateAllQuality, 3000)
+}
+
+function stopQualityMonitor(){
+  clearInterval(_qualityTimer)
+  _qualityTimer = null
+}
+
+async function updateAllQuality(){
+  for(const [k, pc] of Object.entries(peerConnections)){
+    try {
+      const stats = await pc.getStats()
+      let rtt = null, lost = 0, sent = 0
+
+      stats.forEach(report => {
+        if(report.type === "remote-inbound-rtp" && report.kind === "video"){
+          if(report.roundTripTime != null) rtt = report.roundTripTime * 1000  // ms
+          if(report.packetsLost != null)   lost = report.packetsLost
+        }
+        if(report.type === "outbound-rtp" && report.kind === "video"){
+          if(report.packetsSent != null) sent = report.packetsSent
+        }
+      })
+
+      const lossRate = sent > 0 ? lost / sent : 0
+      const qual = document.getElementById("qual_"+k)
+      if(!qual) continue
+
+      if(rtt === null){
+        qual.textContent = "📶"
+      } else if(rtt < 150 && lossRate < 0.02){
+        qual.textContent = "🟢"
+        qual.title = `RTT: ${Math.round(rtt)}ms`
+      } else if(rtt < 400 && lossRate < 0.08){
+        qual.textContent = "🟡"
+        qual.title = `RTT: ${Math.round(rtt)}ms`
+      } else {
+        qual.textContent = "🔴"
+        qual.title = `RTT: ${Math.round(rtt)}ms — poor connection`
+      }
+    } catch(e){ /* pc may be closed */ }
+  }
 }
 
 function renderParticipants(){
