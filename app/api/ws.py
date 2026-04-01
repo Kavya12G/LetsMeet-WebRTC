@@ -215,6 +215,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         })
                 continue
 
+            if signal_type in ("raise_hand", "reaction"):
+                for peer_id in list(rooms[room_id]):
+                    if peer_id != user_id:
+                        await manager.send_to_user(peer_id, {
+                            **message, "from": user_id
+                        })
+                continue
+
             target_user_id = message.get("target")
             signal_data = message.get("data")
             if target_user_id is not None:
