@@ -6,8 +6,6 @@ from pathlib import Path
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.db.session import engine
-from app.db.base import Base
 from app.api import auth, protected, ws
 from app.websocket.signaling import router as signaling_router
 from app.core.config import settings
@@ -41,12 +39,6 @@ app.include_router(auth.router)
 app.include_router(protected.router)
 app.include_router(ws.router)
 app.include_router(signaling_router)
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled error on {request.method} {request.url}: {exc}", exc_info=True)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/")
