@@ -523,14 +523,10 @@ function prejoinToggleCam(){
 }
 
 function joinFromPrejoin(){
-  // Hide prejoin, show meeting
   document.getElementById("prejoin").style.display = "none"
   document.getElementById("meeting").style.display = "block"
-  
-  // Use the prejoin stream as localStream
-  localStream = prejoinStream
-  
-  // Join the room
+  // Use prejoin stream if available, joinRoom will handle fallback if not
+  if(prejoinStream) localStream = prejoinStream
   joinRoom()
 }
 
@@ -607,10 +603,19 @@ async function joinRoom(){
   const room  = document.getElementById("room").value
   const token = document.getElementById("token").value
 
-  // localStream already set from prejoin
+  // If no stream yet, try to get one, or proceed without media
   if(!localStream){
-    alert("Please allow camera/mic access first")
-    return
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
+    } catch(e){
+      try {
+        // fallback: audio only
+        localStream = await navigator.mediaDevices.getUserMedia({video:false, audio:true})
+      } catch(e2){
+        // fallback: no media at all — create empty stream
+        localStream = new MediaStream()
+      }
+    }
   }
 
   // Save for reconnect
