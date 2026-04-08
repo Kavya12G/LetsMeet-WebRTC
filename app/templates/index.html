@@ -624,6 +624,15 @@ async function joinRoom(){
   if(!_refreshToken) _refreshToken = token  // fallback, overwritten after login
   scheduleTokenRefresh(token)
 
+  // Check token isn't expired before connecting
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    if(payload.exp * 1000 < Date.now()){
+      alert("Your token has expired. Please login again at /docs to get a new token.")
+      return
+    }
+  } catch(e){ /* invalid token, let server reject it */ }
+
   // Fetch TURN/ICE config from server (credentials stay server-side)
   try {
     const res = await fetch("/protected/ice-config", {
