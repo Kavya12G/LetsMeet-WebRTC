@@ -403,6 +403,7 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
 
 <div class="topbar">
   <h3 style="margin-right:20px;">WebRTC Meeting</h3>
+  <span id="meetingTimer" style="font-size:13px;color:#9aa0a6;font-variant-numeric:tabular-nums;min-width:48px;display:none;">00:00</span>
   Room: <input id="room" value="room1">
   Token: <input id="token">
   <button onclick="joinRoom()">Join</button>
@@ -692,6 +693,7 @@ async function joinRoom(){
       setTimeout(() => broadcastState(), 500)
       refreshParticipants()
       startQualityMonitor()
+      startMeetingTimer()
 
       // show a tile for every existing user and wait — THEY will send me offers
       msg.users.forEach(uid => {
@@ -1119,6 +1121,7 @@ function leaveRoom(){
   clearTimeout(_reconnectTimer)
   clearTimeout(_tokenRefreshTimer)
   stopQualityMonitor()
+  stopMeetingTimer()
   _reconnectTimer = null
   _tokenRefreshTimer = null
   hideReconnectOverlay()
@@ -1271,6 +1274,33 @@ function showReactionFloat(id, emoji){
   el.textContent = emoji
   tile.appendChild(el)
   setTimeout(() => el.remove(), 2000)
+}
+
+// ── meeting timer ─────────────────────────────────────────────────────────────
+let _timerInterval = null
+let _timerStart = null
+
+function startMeetingTimer(){
+  _timerStart = Date.now()
+  const el = document.getElementById("meetingTimer")
+  el.style.display = "inline"
+  _timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - _timerStart) / 1000)
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    el.textContent = h > 0
+      ? `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`
+      : `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`
+  }, 1000)
+}
+
+function stopMeetingTimer(){
+  clearInterval(_timerInterval)
+  _timerInterval = null
+  _timerStart = null
+  const el = document.getElementById("meetingTimer")
+  if(el){ el.style.display = "none"; el.textContent = "00:00" }
 }
 
 // ── connection quality ─────────────────────────────────────────────────────────
