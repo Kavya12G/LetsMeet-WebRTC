@@ -1145,25 +1145,60 @@ function leaveRoom(){
 
 async function shareScreen(){
   try{
-    const s = await navigator.mediaDevices.getDisplayMedia({video:true})
-    const t = s.getVideoTracks()[0]
-    Object.values(peerConnections).forEach(pc=>{
-      const sender=pc.getSenders().find(s=>s.track?.kind==="video")
-      if(sender) sender.replaceTrack(t)
+    // Request screen + system audio (audio:true is a hint — browser may or may not capture it)
+    const s = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        sampleRate: 44100
+      }
     })
-    showTile("local", myName, s, true)
-    t.onended = ()=>switchToCamera()
-  }catch(e){ console.error(e) }
+
+    const videoTrack = s.getVideoTracks()[0]
+    const audioTrack = s.getAudioTracks()[0]  // null if browser didn't capture audio
+
+    // Replace video track in all peer connections
+    Object.values(peerConnections).forEach(pc => {
+      const videoSender = pc.getSenders().find(s => s.track?.kind === "video")
+      if(videoSender) videoSender.replaceTrack(videoTrack)
+
+      // Replace audio track only if screen audio was captured
+      if(audioTrack){
+        const audioSender = pc.getSenders().find(s => s.track?.kind === "audio")
+        if(audioSender) audioSender.replaceTrack(audioTrack)
+      }
+    })
+
+    // Show screen on local tile
+    showTile("local", myName + " (screen)", s, true)
+
+    // When screen share stops, switch back to camera
+    videoTrack.onended = () => switchToCamera()
+    if(audioTrack) audioTrack.onended = () => switchToCamera()
+
+    dbg("Screen share started" + (audioTrack ? " with audio" : " (no system audio)"))
+  } catch(e){
+    if(e.name !== "NotAllowedError") console.error(e)
+    dbg("Screen share cancelled or failed: " + e.message)
+  }
 }
 
 async function switchToCamera(){
-  const s = await navigator.mediaDevices.getUserMedia({video:true,audio:true})
-  Object.values(peerConnections).forEach(pc=>{
-    const sender=pc.getSenders().find(s=>s.track?.kind==="video")
-    if(sender) sender.replaceTrack(s.getVideoTracks()[0])
-  })
-  showTile("local", myName, s, true)
-  localStream=s
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
+    Object.values(peerConnections).forEach(pc=>{
+      const videoSender = pc.getSenders().find(s=>s.track?.kind==="video")
+      if(videoSender) videoSender.replaceTrack(s.getVideoTracks()[0])
+      const audioSender = pc.getSenders().find(s=>s.track?.kind==="audio")
+      if(audioSender) audioSender.replaceTrack(s.getAudioTracks()[0])
+    })
+    showTile("local", myName, s, true)
+    localStream = s
+    dbg("Switched back to camera")
+  } catch(e){
+    dbg("switchToCamera failed: " + e.message)
+  }
 }
 
 function detectSpeaker(stream, tile){
