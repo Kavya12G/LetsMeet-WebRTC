@@ -292,6 +292,16 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
 }
 #emojiPicker button:hover{transform:scale(1.3);}
 
+/* ── Toast notification ──────────────────────────────────────────────────────── */
+#toast{
+  position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+  background:#323232;color:#fff;padding:12px 20px;border-radius:8px;
+  font-size:14px;z-index:9999;display:none;
+  box-shadow:0 4px 12px rgba(0,0,0,0.4);max-width:90vw;text-align:center;
+}
+#toast.warn{ background:#b06000; }
+#toast.error{ background:#c62828; }
+
 /* ── Mobile responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   /* Topbar: hide room/token inputs, show only title + join btn */
@@ -364,6 +374,7 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#202124;color:wh
 </div>
 
 <div id="admitQueue"></div>
+<div id="toast"></div>
 
 <div id="emojiPicker">
   <button onclick="sendReaction('👍')">👍</button>
@@ -629,6 +640,7 @@ async function joinRoom(){
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
     if(payload.exp * 1000 < Date.now()){
+      showToast("❌ Token expired. Please login again at /docs to get a new token.", "error", 8000)
       alert("Your token has expired. Please login again at /docs to get a new token.")
       return
     }
@@ -661,6 +673,7 @@ async function joinRoom(){
   ws.onclose = e  => {
     dbg("WS closed: " + e.code)
     if(!_intentionalLeave && _hasJoinedOnce && !isWaiting){
+      showToast("Connection lost. Reconnecting...", "warn", 3000)
       scheduleReconnect()
     }
   }
@@ -806,6 +819,18 @@ async function joinRoom(){
 
 function send(obj){ ws.send(JSON.stringify(obj)) }
 
+// ── toast notifications ────────────────────────────────────────────────────────
+let _toastTimer = null
+function showToast(msg, type="info", duration=4000){
+  const el = document.getElementById("toast")
+  if(!el) return
+  el.textContent = msg
+  el.className = type
+  el.style.display = "block"
+  clearTimeout(_toastTimer)
+  _toastTimer = setTimeout(() => { el.style.display = "none" }, duration)
+}
+
 // ── token refresh ──────────────────────────────────────────────────────────────
 function scheduleTokenRefresh(token){
   clearTimeout(_tokenRefreshTimer)
@@ -829,8 +854,12 @@ function scheduleTokenRefresh(token){
           scheduleTokenRefresh(_lastToken)
         } else {
           dbg("Token refresh failed — user may need to re-login")
+          showToast("⚠️ Session refresh failed. Your call may drop soon — please re-login.", "warn", 8000)
         }
-      } catch(e){ dbg("Token refresh error: " + e) }
+      } catch(e){
+        dbg("Token refresh error: " + e)
+        showToast("⚠️ Connection issue refreshing session. Call may drop soon.", "warn", 8000)
+      }
     }, expiresIn)
   } catch(e){ dbg("Could not schedule token refresh") }
 }
